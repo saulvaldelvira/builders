@@ -108,13 +108,14 @@ pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro
         };
         quote! { #field_name: #expr }
     });
+    let generics = &ast.generics;
     quote! {
-        pub struct #builder_name {
+        pub struct #builder_name #generics {
             #( #builder_fields ,)*
         }
 
-        impl #builder_name {
-            pub fn build(&self) -> std::result::Result<#ident,std::boxed::Box<dyn std::error::Error>> {
+        impl #generics #builder_name #generics {
+            pub fn build(&self) -> std::result::Result<#ident #generics,std::boxed::Box<dyn std::error::Error>> {
                 Ok(#ident {
                     #( #build_fields ,)*
                 })
@@ -122,8 +123,8 @@ pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro
             #( #builder_methods )*
         }
 
-        impl #ident {
-            fn builder() -> #builder_name {
+        impl #generics #ident #generics {
+            fn builder() -> #builder_name #generics {
                 #builder_name {
                     #( #empty_fields ,)*
                 }
