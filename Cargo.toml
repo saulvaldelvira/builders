@@ -1,9 +1,9 @@
 [package]
 name = "builders"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 autotests = false
-description = "Rust macros to initialize structs"
+description = "Rust macros for building structs"
 authors = ["Saúl Valdelvira <saul@saulv.es>"]
 license = "MIT"
 readme = "README"
@@ -22,3 +22,10 @@ trybuild = { version = "1.0.49", features = ["diff"] }
 proc-macro2 = "1.0.86"
 quote = "1.0.36"
 syn = { version = "2.0.67", features = ["extra-traits"] }
+
+[features]
+default = ["builder", "getters", "setters"]
+builder = []
+getters = []
+setters = []
+
