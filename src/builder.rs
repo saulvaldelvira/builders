@@ -146,7 +146,7 @@ pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro
         }
 
         impl #generics #ident #generics {
-            fn builder() -> #builder_name #generics {
+            #vis fn builder() -> #builder_name #generics {
                 #builder_name {
                     #( #empty_fields ,)*
                 }
