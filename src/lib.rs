@@ -82,3 +82,24 @@ pub fn constructor_derive(input: TokenStream) -> TokenStream {
     constructor::constructor_derive_impl(input)
 }
 
+
+#[cfg(feature = "as_box")]
+#[proc_macro_derive(AsBox)]
+pub fn auto_box_derive(input: TokenStream) -> TokenStream {
+    use syn::parse_macro_input;
+
+    let ast = parse_macro_input!(input as syn::DeriveInput);
+    let ident = &ast.ident;
+    let vis = &ast.vis;
+    let generics = &ast.generics;
+    let stripped = util::get_stripped_generics(generics);
+    let wher = &generics.where_clause;
+
+    quote::quote! {
+        impl #generics #ident #stripped #wher {
+            #vis fn as_box(self) -> std::boxed::Box<#ident #stripped> {
+                std::boxed::Box::new(self)
+            }
+        }
+    }.into()
+}
