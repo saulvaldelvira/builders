@@ -1,5 +1,4 @@
-use proc_macro::TokenStream;
-use syn::{parse_macro_input, punctuated::Punctuated, spanned::Spanned, token::Comma, AngleBracketedGenericArguments, Attribute, Data, DataStruct, DeriveInput, Field, Fields, FieldsNamed, GenericArgument, Ident, Meta, MetaList, MetaNameValue, Path, PathArguments, Type, TypePath};
+use syn::{punctuated::Punctuated, spanned::Spanned, token::Comma, AngleBracketedGenericArguments, Attribute, Data, DataStruct, DeriveInput, Field, Fields, FieldsNamed, GenericArgument, Ident, Meta, MetaList, MetaNameValue, Path, PathArguments, Type, TypePath};
 use quote::quote;
 
 pub (crate) fn get_inner_ty<'a>(ty: &'a syn::Type, from: &str) -> Option<Vec<&'a syn::Type>> {
@@ -44,8 +43,8 @@ pub (crate) fn get_named_struct(input: &DeriveInput) -> syn::Result<&Punctuated<
     }
 }
 
-pub (crate) fn get_field_attr<'a>(field: &'a Field, name: &str) -> Option<&'a Attribute> {
-    for attr in &field.attrs {
+pub (crate) fn get_field_attr<'a>(attrs: &'a [Attribute], name: &str) -> Vec<&'a Attribute> {
+    attrs.iter().filter_map(|attr| {
         let segments = match &attr.meta {
             Meta::Path(Path { segments, .. }) => segments,
             Meta::List(MetaList { path: Path { segments,.. },.. } ) => segments,
@@ -56,8 +55,8 @@ pub (crate) fn get_field_attr<'a>(field: &'a Field, name: &str) -> Option<&'a At
                 return Some(attr);
             }
         }
-    }
-    None
+        None
+    }).collect()
 }
 
 #[inline(always)]
@@ -69,13 +68,12 @@ pub (crate) fn get_field_ident(field: &Field) -> &syn::Ident {
 }
 
 #[cfg(any(feature = "setters",feature = "getters"))]
-pub (crate) fn gen_for_each_field<F>(input: TokenStream, attr: &str, prefix: &str, fun: F) -> proc_macro::TokenStream
+pub (crate) fn gen_for_each_field<F>(ast: &DeriveInput, attr: &str, prefix: &str, fun: F) -> proc_macro::TokenStream
 where
     F: Fn(&Field,bool) -> proc_macro2::TokenStream
 {
     use syn::{Expr, ExprLit, Lit, LitBool};
 
-    let ast = parse_macro_input!(input as DeriveInput);
     let name = &ast.ident;
     let vis = &ast.vis;
     let fields = match get_named_struct(&ast) {
@@ -85,18 +83,20 @@ where
 
     let methods = fields.iter().filter_map(|f| {
         let mut each = false;
-        if let Some(Attribute{ meta: Meta::NameValue(MetaNameValue{value: Expr::Lit(ExprLit { lit, .. }),..}),..},..) = get_field_attr(f, attr) {
-            if let Lit::Bool(LitBool{value,..}) = lit {
-                if !value { return None; }
-            }
+        for attr in get_field_attr(&f.attrs, attr) {
+            if let Attribute{ meta: Meta::NameValue(MetaNameValue{value: Expr::Lit(ExprLit { lit, .. }),..}),..} = attr {
+                if let Lit::Bool(LitBool{value,..}) = lit {
+                    if !value { return None; }
+                }
             if let Lit::Str(value) = lit {
                 if value.value() == "inner" {
                     each = true;
                 }
             }
         }
+        }
         let ident = get_field_ident(f);
-        let new_ident = Ident::new(&format!("{prefix}_{}", ident), f.span());
+        let new_ident = Ident::new(&format!("{prefix}{}", ident), f.span());
         let code = fun(f,each);
         Some(quote! {
             #vis fn #new_ident #code
@@ -109,3 +109,23 @@ where
         }
     }.into()
 }
+
+#[cfg(any(feature = "setters",feature = "getters"))]
+pub (crate) fn get_prefix<'a>(attrs: &'a [Attribute], def: &'a str, attr_name: &str) -> std::borrow::Cow<'a,str> {
+    use proc_macro2::TokenTree;
+    use syn::Lit;
+    for attr in get_field_attr(attrs, attr_name) {
+        if let Attribute { meta: Meta::List(MetaList { ref tokens, .. }), .. } = attr {
+            let mut tokens = tokens.clone().into_iter();
+            let Some(TokenTree::Ident( ref i )) = tokens.next() else { continue };
+            if i == "prefix" {
+                tokens.next();
+                let Some(TokenTree::Literal(l)) = tokens.next() else { continue };
+                let Lit::Str(str) = Lit::new(l) else { continue };
+                return str.value().into();
+            }
+        }
+    }
+    def.into()
+}
+

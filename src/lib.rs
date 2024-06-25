@@ -10,12 +10,17 @@ pub fn builder_derive(input: TokenStream) -> TokenStream {
     builder::builder_derive_impl(input)
 }
 
+
 #[cfg(feature = "getters")]
-#[proc_macro_derive(Getters, attributes(getter))]
+#[proc_macro_derive(Getters, attributes(getter,getters))]
 pub fn getters_derive(input: TokenStream) -> TokenStream {
     use quote::quote;
+    use syn::{parse_macro_input, DeriveInput};
+    let ast = parse_macro_input!(input as DeriveInput);
 
-    util::gen_for_each_field(input, "getter", "get", |field,each| {
+    let prefix = util::get_prefix(&ast.attrs, "get_", "getters");
+
+    util::gen_for_each_field(&ast, "getter", &prefix, |field,each| {
         let ident = util::get_field_ident(field);
         let ty = &field.ty;
         if each {
@@ -50,14 +55,19 @@ pub fn getters_derive(input: TokenStream) -> TokenStream {
 }
 
 #[cfg(feature = "setters")]
-#[proc_macro_derive(Setters, attributes(setter))]
+#[proc_macro_derive(Setters, attributes(setter,setters))]
 pub fn setters_derive(input: TokenStream) -> TokenStream {
-    util::gen_for_each_field(input, "setter", "set", |field,_each| {
+    use syn::{parse_macro_input, DeriveInput};
+
+    let ast = parse_macro_input!(input as DeriveInput);
+    let prefix = util::get_prefix(&ast.attrs, "set_", "setters");
+
+    util::gen_for_each_field(&ast, "setter", &prefix, |field,_each| {
         let ident = util::get_field_ident(field);
         let ty = &field.ty;
         quote::quote! {
-            (&mut self, #ident: #ty) {
-                self.#ident = #ident;
+            (&mut self, #ident: impl std::convert::Into<#ty>) {
+                self.#ident = #ident.into();
             }
         }
     })

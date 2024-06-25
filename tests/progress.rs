@@ -11,4 +11,5 @@ fn tests() {
     t.compile_fail("tests/08-unrecognized-attribute.rs");
     t.pass("tests/09-redefined-prelude-types.rs");
     t.pass("tests/10-hash-map.rs");
+    t.pass("tests/11-prefix.rs");
 }
