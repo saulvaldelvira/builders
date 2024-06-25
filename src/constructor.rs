@@ -1,13 +1,12 @@
 use quote::quote;
 use syn::{parse_macro_input, DeriveInput};
 
-use crate::util;
+use crate::util::{self, get_stripped_generics};
 
 pub (crate) fn constructor_derive_impl(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
     let vis = &ast.vis;
     let name = &ast.ident;
-    let generics = &ast.generics;
 
     let fields = match util::get_named_struct(&ast) {
         Ok(fields) => fields,
@@ -28,11 +27,15 @@ pub (crate) fn constructor_derive_impl(input: proc_macro::TokenStream) -> proc_m
         }
     });
 
+    let generics = &ast.generics;
+    let wher = &generics.where_clause;
+    let stripped_generics = get_stripped_generics(generics);
+
     quote! {
-        impl #generics #name #generics {
+        impl #generics #name #stripped_generics #wher {
             #vis fn new(
                 #( #args ,)*
-            ) -> Self {
+            ) -> #name #stripped_generics {
                 Self {
                     #( #names ,)*
                 }

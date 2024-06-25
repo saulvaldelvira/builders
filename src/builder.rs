@@ -2,7 +2,7 @@ use proc_macro2::{TokenStream, TokenTree};
 use quote::quote;
 use syn::{parse_macro_input, Data, DataStruct, DeriveInput, Fields, FieldsNamed, Ident, LitStr};
 
-use crate::util::{self, get_inner_ty, get_inner_tys};
+use crate::util::{self, get_inner_ty, get_inner_tys, get_stripped_generics};
 
 fn find_attr_each(f: &syn::Field) -> Result<LitStr,proc_macro2::TokenStream> {
     for attr in &f.attrs {
@@ -130,14 +130,16 @@ pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro
         quote! { #field_name: #expr }
     });
     let generics = &ast.generics;
+    let wher = &generics.where_clause;
+    let stripped_generics = get_stripped_generics(generics);
     let vis = &ast.vis;
     quote! {
         #vis struct #builder_name #generics {
             #( #builder_fields ,)*
         }
 
-        impl #generics #builder_name #generics {
-            #vis fn build(&self) -> std::result::Result<#ident #generics,std::boxed::Box<dyn std::error::Error>> {
+        impl #generics #builder_name #stripped_generics #wher {
+            #vis fn build(&self) -> std::result::Result<#ident #stripped_generics,std::boxed::Box<dyn std::error::Error>> {
                 Ok(#ident {
                     #( #build_fields ,)*
                 })
@@ -145,8 +147,8 @@ pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro
             #( #builder_methods )*
         }
 
-        impl #generics #ident #generics {
-            #vis fn builder() -> #builder_name #generics {
+        impl #generics #ident #stripped_generics #wher {
+            #vis fn builder() -> #builder_name #stripped_generics {
                 #builder_name {
                     #( #empty_fields ,)*
                 }

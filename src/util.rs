@@ -1,4 +1,4 @@
-use syn::{punctuated::Punctuated, spanned::Spanned, token::Comma, AngleBracketedGenericArguments, Attribute, Data, DataStruct, DeriveInput, Field, Fields, FieldsNamed, GenericArgument, Ident, Meta, MetaList, MetaNameValue, Path, PathArguments, Type, TypePath};
+use syn::{punctuated::Punctuated, spanned::Spanned, token::Comma, AngleBracketedGenericArguments, Attribute, Data, DataStruct, DeriveInput, Field, Fields, FieldsNamed, GenericArgument, GenericParam, Generics, Ident, Meta, MetaList, MetaNameValue, Path, PathArguments, Type, TypePath};
 use quote::quote;
 
 pub (crate) fn get_inner_ty<'a>(ty: &'a syn::Type, from: &str) -> Option<Vec<&'a syn::Type>> {
@@ -29,6 +29,19 @@ pub (crate) fn get_inner_tys<'a>(ty: &'a syn::Type, from: &'a [&str]) -> Option<
     from.into_iter().filter_map(|from| {
         get_inner_ty(ty, from).map(|ty| (*from,ty))
     }).next()
+}
+
+pub (crate) fn get_stripped_generics(generics: &Generics) -> proc_macro2::TokenStream {
+    let generics = generics.params.iter().map(|param| {
+        let mut param = param.clone();
+        match param {
+            GenericParam::Lifetime(ref mut l) => l.bounds = Punctuated::new(),
+            GenericParam::Type(ref mut t) => t.bounds = Punctuated::new(),
+            _ => {}
+        };
+        quote!(#param)
+    });
+    quote!(< #( #generics ,)* >)
 }
 
 pub (crate) fn get_named_struct(input: &DeriveInput) -> syn::Result<&Punctuated<Field,Comma>> {
@@ -103,8 +116,12 @@ where
         })
     });
 
+    let generics = &ast.generics;
+    let wher = &generics.where_clause;
+    let stripped_generics = get_stripped_generics(generics);
+
     quote! {
-        impl #name {
+        impl #generics #name #stripped_generics #wher {
             #( #methods )*
         }
     }.into()
