@@ -2,29 +2,35 @@ use proc_macro::TokenStream;
 use syn::{parse_macro_input, punctuated::Punctuated, spanned::Spanned, token::Comma, AngleBracketedGenericArguments, Attribute, Data, DataStruct, DeriveInput, Field, Fields, FieldsNamed, GenericArgument, Ident, Meta, MetaList, MetaNameValue, Path, PathArguments, Type, TypePath};
 use quote::quote;
 
-pub (crate) fn get_inner_ty<'a>(ty: &'a syn::Type, from: &str) -> Option<&'a syn::Type>{
+pub (crate) fn get_inner_ty<'a>(ty: &'a syn::Type, from: &str) -> Option<Vec<&'a syn::Type>> {
     let Type::Path(
             TypePath {
                 path : Path { ref segments, .. }, ..
         }) = ty else { return None };
-    if segments.len() != 1 || segments[0].ident != from {
-        return None;
+    if let Some(segment) = segments.last() {
+        if segment.ident != from {
+            return None;
+        }
     }
     if let PathArguments::AngleBracketed(
             AngleBracketedGenericArguments { ref args, .. }
             , .. ) = segments[0].arguments
     {
-        if args.len() != 1 {
-            return None;
-        }
-        let inner_ty = args.first().unwrap();
-        if let GenericArgument::Type(ref t) = inner_ty {
-            return Some(t);
-        }
+        return Some(args.into_iter().filter_map(|t| {
+            if let GenericArgument::Type(ref t) = t {
+                return Some(t);
+            }
+            None
+        }).collect());
     }
     None
 }
 
+pub (crate) fn get_inner_tys<'a>(ty: &'a syn::Type, from: &'a [&str]) -> Option<(&'a str,Vec<&'a syn::Type>)> {
+    from.into_iter().filter_map(|from| {
+        get_inner_ty(ty, from).map(|ty| (*from,ty))
+    }).next()
+}
 
 pub (crate) fn get_named_struct(input: &DeriveInput) -> syn::Result<&Punctuated<Field,Comma>> {
     let Data::Struct(DataStruct {ref fields,.. }) = input.data else {

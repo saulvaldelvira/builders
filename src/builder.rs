@@ -2,7 +2,7 @@ use proc_macro2::{TokenStream, TokenTree};
 use quote::quote;
 use syn::{parse_macro_input, Data, DataStruct, DeriveInput, Fields, FieldsNamed, Ident, LitStr};
 
-use crate::util;
+use crate::util::{self, get_inner_ty, get_inner_tys};
 
 fn find_attr_each(f: &syn::Field) -> Result<LitStr,proc_macro2::TokenStream> {
     for attr in &f.attrs {
@@ -52,7 +52,7 @@ pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro
     let builder_fields = fields.iter().map(|f| {
         let name = &f.ident;
         let ty = &f.ty;
-        if util::get_inner_ty(ty,"Option").is_some() ||
+        if get_inner_ty(ty,"Option").is_some() ||
             find_attr_each(f).is_ok() {
             quote! {
                 #name: #ty
@@ -68,16 +68,31 @@ pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro
         match find_attr_each(f) {
             Ok(lit) => {
                 let arg = Ident::new(&lit.value(), lit.span());
-                let inner_ty = util::get_inner_ty(&f.ty, "Vec");
-                return quote! {
-                    pub fn #arg(&mut self, #arg: impl std::convert::Into<#inner_ty>) -> &mut Self {
-                        self.#field_name.push(#arg.into());
-                        self
-                    }
+                let (ty,inner_ty) = get_inner_tys(&f.ty, &["Vec","HashMap"]).unwrap();
+                let first = inner_ty.first();
+                match ty {
+                    "Vec" => {
+                        quote! {
+                            pub fn #arg(&mut self, #arg: impl std::convert::Into<#first>) -> &mut Self {
+                                self.#field_name.push(#arg.into());
+                                self
+                            }
+                        }
+                    },
+                    "HashMap" => {
+                        let second = inner_ty[1];
+                        quote! {
+                            pub fn #arg(&mut self, #arg: impl std::convert::Into<#first>, val: impl std::convert::Into<#second>) -> &mut Self {
+                                self.#field_name.insert(#arg.into(),val.into());
+                                self
+                            }
+                        }
+                    },
+                   _ => unimplemented!()
                 }
             },
             Err(err) => {
-                let ty = util::get_inner_ty(&f.ty,"Option").unwrap_or(&f.ty);
+                let ty = get_inner_ty(&f.ty,"Option").map(|l| l[0]).unwrap_or(&f.ty);
                 quote! {
                     #err
                     pub fn #field_name(&mut self, #field_name: impl std::convert::Into<#ty>) -> &mut Self {
@@ -91,10 +106,16 @@ pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro
     let empty_fields = fields.iter().map(|f| {
         let field_name = &f.ident;
         if find_attr_each(f).is_ok() {
-            quote! { #field_name : Vec::new() }
-        } else {
-            quote! { #field_name : std::option::Option::None }
+            if let Some((out,_)) = get_inner_tys(&f.ty, &["Vec","HashMap"]) {
+                let out = match out {
+                    "Vec" => quote!(Vec),
+                    "HashMap" => quote!(HashMap),
+                    _ => unreachable!()
+                };
+                return quote! { #field_name : #out ::new() };
+            } else { unreachable!() }
         }
+        quote! { #field_name : std::option::Option::None }
     });
     let build_fields = fields.iter().map(|f| {
         let field_name = &f.ident;
@@ -109,13 +130,14 @@ pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro
         quote! { #field_name: #expr }
     });
     let generics = &ast.generics;
+    let vis = &ast.vis;
     quote! {
-        pub struct #builder_name #generics {
+        #vis struct #builder_name #generics {
             #( #builder_fields ,)*
         }
 
         impl #generics #builder_name #generics {
-            pub fn build(&self) -> std::result::Result<#ident #generics,std::boxed::Box<dyn std::error::Error>> {
+            #vis fn build(&self) -> std::result::Result<#ident #generics,std::boxed::Box<dyn std::error::Error>> {
                 Ok(#ident {
                     #( #build_fields ,)*
                 })
