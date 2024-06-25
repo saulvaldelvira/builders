@@ -1,6 +1,6 @@
 [package]
 name = "builders"
-version = "0.1.6"
+version = "0.1.7"
 edition = "2021"
 autotests = false
 description = "Rust macros for building structs"
@@ -24,8 +24,9 @@ quote = "1.0.36"
 syn = { version = "2.0.67", features = ["extra-traits"] }
 
 [features]
-default = ["builder", "getters", "setters"]
+default = ["builder", "getters", "setters","constructor"]
 builder = []
 getters = []
 setters = []
+constructor = []
 

@@ -72,3 +72,13 @@ pub fn setters_derive(input: TokenStream) -> TokenStream {
         }
     })
 }
+
+#[cfg(feature = "constructor")]
+mod constructor;
+
+#[cfg(feature = "constructor")]
+#[proc_macro_derive(Constructor)]
+pub fn constructor_derive(input: TokenStream) -> TokenStream {
+    constructor::constructor_derive_impl(input)
+}
+

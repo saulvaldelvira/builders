@@ -12,4 +12,5 @@ fn tests() {
     t.pass("tests/09-redefined-prelude-types.rs");
     t.pass("tests/10-hash-map.rs");
     t.pass("tests/11-prefix.rs");
+    t.pass("tests/constructor.rs");
 }
