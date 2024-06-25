@@ -13,10 +13,35 @@ pub fn builder_derive(input: TokenStream) -> TokenStream {
 #[cfg(feature = "getters")]
 #[proc_macro_derive(Getters, attributes(getter))]
 pub fn getters_derive(input: TokenStream) -> TokenStream {
-    util::gen_for_each_field(input, "getter", "get", |field| {
+    use quote::quote;
+
+    util::gen_for_each_field(input, "getter", "get", |field,each| {
         let ident = util::get_field_ident(field);
         let ty = &field.ty;
-        quote::quote! {
+        if each {
+            if let Some((out,inner)) = util::get_inner_tys(ty,&["Vec","HashMap"]) {
+                let first = inner[0];
+                return match out {
+                    "Vec" => {
+                        quote! {
+                            (&self, i: usize) -> std::option::Option<&#first> {
+                                self.#ident.get(i)
+                            }
+                        }
+                    },
+                    "HashMap" => {
+                        let second = inner[1];
+                        quote! {
+                            (&self, key: & #first) -> std::option::Option<&#second> {
+                                self.#ident.get(key)
+                            }
+                        }
+                    },
+                    _ => unreachable!()
+                }
+            }
+        }
+        quote! {
             (&self) -> & #ty {
                 & self.#ident
             }
@@ -27,7 +52,7 @@ pub fn getters_derive(input: TokenStream) -> TokenStream {
 #[cfg(feature = "setters")]
 #[proc_macro_derive(Setters, attributes(setter))]
 pub fn setters_derive(input: TokenStream) -> TokenStream {
-    util::gen_for_each_field(input, "setter", "set", |field| {
+    util::gen_for_each_field(input, "setter", "set", |field,_each| {
         let ident = util::get_field_ident(field);
         let ty = &field.ty;
         quote::quote! {

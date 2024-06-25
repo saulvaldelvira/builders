@@ -71,7 +71,7 @@ pub (crate) fn get_field_ident(field: &Field) -> &syn::Ident {
 #[cfg(any(feature = "setters",feature = "getters"))]
 pub (crate) fn gen_for_each_field<F>(input: TokenStream, attr: &str, prefix: &str, fun: F) -> proc_macro::TokenStream
 where
-    F: Fn(&Field) -> proc_macro2::TokenStream
+    F: Fn(&Field,bool) -> proc_macro2::TokenStream
 {
     use syn::{Expr, ExprLit, Lit, LitBool};
 
@@ -84,14 +84,20 @@ where
     };
 
     let methods = fields.iter().filter_map(|f| {
-        if let Some(Attribute{ meta: Meta::NameValue(MetaNameValue{value,..}),..},..) = get_field_attr(f, attr) {
-            if let Expr::Lit(ExprLit{lit: Lit::Bool(LitBool{value,..}),..},..) = value {
+        let mut each = false;
+        if let Some(Attribute{ meta: Meta::NameValue(MetaNameValue{value: Expr::Lit(ExprLit { lit, .. }),..}),..},..) = get_field_attr(f, attr) {
+            if let Lit::Bool(LitBool{value,..}) = lit {
                 if !value { return None; }
+            }
+            if let Lit::Str(value) = lit {
+                if value.value() == "inner" {
+                    each = true;
+                }
             }
         }
         let ident = get_field_ident(f);
         let new_ident = Ident::new(&format!("{prefix}_{}", ident), f.span());
-        let code = fun(f);
+        let code = fun(f,each);
         Some(quote! {
             #vis fn #new_ident #code
         })
