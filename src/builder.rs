@@ -6,7 +6,7 @@ use crate::util::{self, get_inner_ty, get_inner_tys};
 
 fn find_attr_each(f: &syn::Field) -> Result<LitStr,proc_macro2::TokenStream> {
     for attr in &f.attrs {
-        let list = attr.meta.require_list().map_err(|err| err.to_compile_error())?;
+        let Ok(list) = attr.meta.require_list() else { continue };
         let segments = &list.path.segments;
         if segments.len() != 1 || segments[0].ident != "builder" { return Err(TokenStream::new()); }
         let mut tokens = list.tokens.clone().into_iter();
