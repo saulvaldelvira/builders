@@ -24,10 +24,11 @@ quote = "1.0.36"
 syn = { version = "2.0.67", features = ["extra-traits"] }
 
 [features]
-default = ["builder", "getters", "setters","constructor"]
+default = ["builder", "getters", "setters","constructor","into_enum"]
 builder = []
 getters = []
 setters = []
 constructor = []
+into_enum = []
 as_box = []
 
