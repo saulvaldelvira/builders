@@ -106,6 +106,27 @@ pub fn auto_box_derive(input: TokenStream) -> TokenStream {
     }.into()
 }
 
+#[cfg(feature = "as_ok")]
+#[proc_macro_derive(AsOk)]
+pub fn as_ok_derive(input: TokenStream) -> TokenStream {
+    use syn::parse_macro_input;
+
+    let ast = parse_macro_input!(input as syn::DeriveInput);
+    let ident = &ast.ident;
+    let vis = &ast.vis;
+    let generics = &ast.generics;
+    let stripped = util::get_stripped_generics(generics);
+    let wher = &generics.where_clause;
+
+    quote::quote! {
+        impl #generics #ident #stripped #wher {
+            #vis fn as_ok<E>(self) -> std::result::Result<#ident #stripped,E> {
+                Ok(self)
+            }
+        }
+    }.into()
+}
+
 #[cfg(feature = "into_enum")]
 #[proc_macro_derive(IntoEnum, attributes(into_enum))]
 pub fn wrap_enum_derive(input: TokenStream) -> TokenStream {
