@@ -4,6 +4,8 @@ use builders::Constructor;
 struct S {
     i: i32,
     s: String,
+    #[constructor = false]
+    opt: Option<i32>,
 }
 
 
