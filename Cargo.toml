@@ -1,12 +1,13 @@
 [package]
 name = "builders"
-version = "0.1.9"
+version = "0.1.10"
 edition = "2021"
 autotests = false
 description = "Rust macros for building structs"
 authors = ["Saúl Valdelvira <saul@saulv.es>"]
 license = "MIT"
 readme = "README"
+repository = "https://github.com/saulvaldelvira/builders"
 
 [lib]
 proc-macro = true

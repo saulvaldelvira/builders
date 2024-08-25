@@ -2,11 +2,11 @@ use std::borrow::Cow;
 
 use proc_macro2::{TokenStream, TokenTree};
 use quote::quote;
-use syn::{parse_macro_input, parse_quote, Data, DataStruct, DeriveInput, Fields, FieldsNamed, Ident, Lit, LitBool, Type};
+use syn::{parse_macro_input, parse_quote, Data, DataStruct, DeriveInput, Expr, Fields, FieldsNamed, Ident, Lit, LitBool, Type};
 
 use crate::util::{get_inner_ty, get_inner_tys, get_stripped_generics};
 
-fn find_attr_nameval(f: &syn::Field, name: &str) -> Result<Lit,proc_macro2::TokenStream> {
+fn find_attr_nameval(f: &syn::Field, name: &str) -> Result<TokenStream,proc_macro2::TokenStream> {
     for attr in &f.attrs {
         let Ok(list) = attr.meta.require_list() else { continue };
         let segments = &list.path.segments;
@@ -22,21 +22,31 @@ fn find_attr_nameval(f: &syn::Field, name: &str) -> Result<Lit,proc_macro2::Toke
             TokenTree::Punct(ref p) => assert_eq!(p.as_char(), '='),
             tt => panic!("Expected '=', found: {tt}"),
         }
-        let token = tokens.next().unwrap();
-        let lit: Lit = parse_quote!(#token);
-        return Ok(lit);
+        return Ok(tokens.next().unwrap().into());
     }
     Err(TokenStream::new())
 }
 
+fn find_attr_nameval_lit(f: &syn::Field, name: &str) -> Result<Lit,proc_macro2::TokenStream> {
+    let token = find_attr_nameval(f, name)?;
+    let lit: Lit = parse_quote!(#token);
+    Ok(lit)
+}
+
+fn find_attr_nameval_expr(f: &syn::Field, name: &str) -> Result<Expr,proc_macro2::TokenStream> {
+    let token = find_attr_nameval(f, name)?;
+    let lit: Expr = parse_quote!(#token);
+    Ok(lit)
+}
+
 fn is_optional(f: &syn::Field) -> bool {
-    if let Ok(Lit::Bool(LitBool{value,..})) = find_attr_nameval(f, "optional") {
+    if let Ok(Lit::Bool(LitBool{value,..})) = find_attr_nameval_lit(f, "optional") {
         value
     } else { false }
 }
 
 fn is_each(f: &syn::Field) -> bool {
-    matches!(find_attr_nameval(f, "each"), Ok(Lit::Str(_)))
+    matches!(find_attr_nameval_lit(f, "each"), Ok(Lit::Str(_)))
 }
 
 pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
@@ -65,7 +75,7 @@ pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro
     });
     let builder_methods = fields.iter().map(|f| {
         let field_name = &f.ident;
-        match find_attr_nameval(f, "each") {
+        match find_attr_nameval_lit(f, "each") {
             Ok(Lit::Str(lit)) => {
                 let arg = Ident::new(&lit.value(), lit.span());
                 let (ty,inner_ty) = get_inner_tys(&f.ty, &["Vec","HashMap"]).unwrap();
@@ -128,15 +138,21 @@ pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro
         }
         quote! { #field_name : std::option::Option::None }
     });
-    let build_fields = fields.iter().map(|f| {
+    let build_fields_let = fields.iter().map(|f| {
         let field_name = &f.ident;
         let expr =
         if is_each(f) || is_optional(f) {
             quote! { self.#field_name.clone() }
+        } else if let Ok(lit) = find_attr_nameval_expr(f, "def"){
+            quote! { self.#field_name.clone().unwrap_or_else(|| #lit .into()) }
         } else {
             quote! { self.#field_name.clone().ok_or(stringify!("{} is not set", #field_name))? }
         };
-        quote! { #field_name: #expr }
+        quote! { let #field_name = #expr ; }
+    });
+    let build_fields = fields.iter().map(|f| {
+        let field_name = &f.ident;
+        quote! { #field_name }
     });
     let generics = &ast.generics;
     let wher = &generics.where_clause;
@@ -149,6 +165,7 @@ pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro
 
         impl #generics #builder_name #stripped_generics #wher {
             #vis fn build(&self) -> std::result::Result<#ident #stripped_generics,std::boxed::Box<dyn std::error::Error>> {
+                #( #build_fields_let )*
                 Ok(#ident {
                     #( #build_fields ,)*
                 })
