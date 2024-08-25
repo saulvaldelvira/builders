@@ -40,6 +40,7 @@ pub struct Command {
     env: Vec<String>,
     #[builder(each = "key")]
     keys: HashMap<i32,String>,
+    #[builder(optional = true)]
     current_dir: Option<String>,
 }
 

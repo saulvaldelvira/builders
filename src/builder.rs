@@ -1,37 +1,42 @@
+use std::borrow::Cow;
+
 use proc_macro2::{TokenStream, TokenTree};
 use quote::quote;
-use syn::{parse_macro_input, Data, DataStruct, DeriveInput, Fields, FieldsNamed, Ident, LitStr};
+use syn::{parse_macro_input, parse_quote, Data, DataStruct, DeriveInput, Fields, FieldsNamed, Ident, Lit, LitBool, Type};
 
-use crate::util::{self, get_inner_ty, get_inner_tys, get_stripped_generics};
+use crate::util::{get_inner_ty, get_inner_tys, get_stripped_generics};
 
-fn find_attr_each(f: &syn::Field) -> Result<LitStr,proc_macro2::TokenStream> {
+fn find_attr_nameval(f: &syn::Field, name: &str) -> Result<Lit,proc_macro2::TokenStream> {
     for attr in &f.attrs {
         let Ok(list) = attr.meta.require_list() else { continue };
         let segments = &list.path.segments;
         if segments.len() != 1 || segments[0].ident != "builder" { return Err(TokenStream::new()); }
         let mut tokens = list.tokens.clone().into_iter();
         match tokens.next().unwrap() {
-            TokenTree::Ident(ref i) => if i != "each" {
-                return Err(syn::Error::new(
-                            i.span(),
-                            format!("expected `builder(each = \"...\")`")).into_compile_error());
+            TokenTree::Ident(ref i) => if i != name {
+                continue
             },
-            tt => panic!("Expected \"each\", found: {tt}"),
+            tt => panic!("Expected \"{name}\", found: {tt}"),
         }
         match tokens.next().unwrap() {
             TokenTree::Punct(ref p) => assert_eq!(p.as_char(), '='),
             tt => panic!("Expected '=', found: {tt}"),
         }
-        let lit = match tokens.next().unwrap() {
-            TokenTree::Literal(lit) => lit,
-            _ => panic!("Expected string"),
-        };
-        match syn::Lit::new(lit) {
-            syn::Lit::Str(s) => return Ok(s),
-            _ => panic!("Expected string"),
-        };
+        let token = tokens.next().unwrap();
+        let lit: Lit = parse_quote!(#token);
+        return Ok(lit);
     }
     Err(TokenStream::new())
+}
+
+fn is_optional(f: &syn::Field) -> bool {
+    if let Ok(Lit::Bool(LitBool{value,..})) = find_attr_nameval(f, "optional") {
+        value
+    } else { false }
+}
+
+fn is_each(f: &syn::Field) -> bool {
+    matches!(find_attr_nameval(f, "each"), Ok(Lit::Str(_)))
 }
 
 pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
@@ -52,21 +57,16 @@ pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro
     let builder_fields = fields.iter().map(|f| {
         let name = &f.ident;
         let ty = &f.ty;
-        if get_inner_ty(ty,"Option").is_some() ||
-            find_attr_each(f).is_ok() {
-            quote! {
-                #name: #ty
-            }
+        if is_each(f) || is_optional(f) {
+            quote!( #name: #ty )
         } else {
-            quote! {
-                #name: std::option::Option<#ty>
-            }
+            quote!( #name: std::option::Option<#ty> )
         }
     });
     let builder_methods = fields.iter().map(|f| {
         let field_name = &f.ident;
-        match find_attr_each(f) {
-            Ok(lit) => {
+        match find_attr_nameval(f, "each") {
+            Ok(Lit::Str(lit)) => {
                 let arg = Ident::new(&lit.value(), lit.span());
                 let (ty,inner_ty) = get_inner_tys(&f.ty, &["Vec","HashMap"]).unwrap();
                 let first = inner_ty.first();
@@ -91,8 +91,19 @@ pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro
                    _ => unimplemented!()
                 }
             },
+            Ok(_) => {
+                quote! {
+                    compile_error!("Expected \"each\" to be a string");
+                }
+            },
             Err(err) => {
-                let ty = get_inner_ty(&f.ty,"Option").map(|l| l[0]).unwrap_or(&f.ty);
+                let ty: Cow<Type> = if is_optional(f) {
+                    let t = get_inner_ty(&f.ty,"Option").map(|l| l[0]).unwrap_or(&f.ty);
+                    let t: Type = parse_quote!(#t);
+                    Cow::Owned(t)
+                } else {
+                    Cow::Borrowed(&f.ty)
+                };
                 quote! {
                     #err
                     pub fn #field_name(&mut self, #field_name: impl std::convert::Into<#ty>) -> &mut Self {
@@ -105,7 +116,7 @@ pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro
     });
     let empty_fields = fields.iter().map(|f| {
         let field_name = &f.ident;
-        if find_attr_each(f).is_ok() {
+        if is_each(f) {
             if let Some((out,_)) = get_inner_tys(&f.ty, &["Vec","HashMap"]) {
                 let out = match out {
                     "Vec" => quote!(Vec),
@@ -120,9 +131,7 @@ pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro
     let build_fields = fields.iter().map(|f| {
         let field_name = &f.ident;
         let expr =
-        if util::get_inner_ty(&f.ty,"Option").is_some()
-            || find_attr_each(f).is_ok()
-        {
+        if is_each(f) || is_optional(f) {
             quote! { self.#field_name.clone() }
         } else {
             quote! { self.#field_name.clone().ok_or(stringify!("{} is not set", #field_name))? }
