@@ -67,7 +67,7 @@ pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro
     let builder_fields = fields.iter().map(|f| {
         let name = &f.ident;
         let ty = &f.ty;
-        if is_each(f) || is_optional(f) {
+        if is_optional(f) {
             quote!( #name: #ty )
         } else {
             quote!( #name: std::option::Option<#ty> )
@@ -84,7 +84,7 @@ pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro
                     "Vec" => {
                         quote! {
                             pub fn #arg(&mut self, #arg: impl std::convert::Into<#first>) -> &mut Self {
-                                self.#field_name.push(#arg.into());
+                                self.#field_name.as_mut().unwrap().push(#arg.into());
                                 self
                             }
                         }
@@ -93,7 +93,7 @@ pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro
                         let second = inner_ty[1];
                         quote! {
                             pub fn #arg(&mut self, #arg: impl std::convert::Into<#first>, val: impl std::convert::Into<#second>) -> &mut Self {
-                                self.#field_name.insert(#arg.into(),val.into());
+                                self.#field_name.as_mut().unwrap().insert(#arg.into(),val.into());
                                 self
                             }
                         }
@@ -127,49 +127,52 @@ pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro
     let empty_fields = fields.iter().map(|f| {
         let field_name = &f.ident;
         if is_each(f) {
-            if let Some((out,_)) = get_inner_tys(&f.ty, &["Vec","HashMap"]) {
-                let out = match out {
-                    "Vec" => quote!(Vec),
-                    "HashMap" => quote!(HashMap),
-                    _ => unreachable!()
-                };
-                return quote! { #field_name : #out ::new() };
-            } else { unreachable!() }
+            let Some((out,_)) = get_inner_tys(&f.ty, &["Vec","HashMap"]) else { unreachable!() };
+            let out = match out {
+                "Vec" => quote!(Vec),
+                "HashMap" => quote!(HashMap),
+                _ => unreachable!()
+            };
+            return quote! { #field_name : std::option::Option::Some(#out ::new()) };
         }
         quote! { #field_name : std::option::Option::None }
-    });
-    let build_fields_let = fields.iter().map(|f| {
-        let field_name = &f.ident;
-        let expr =
-        if is_each(f) || is_optional(f) {
-            quote! { self.#field_name.clone() }
-        } else if let Ok(lit) = find_attr_nameval_expr(f, "def"){
-            quote! { self.#field_name.clone().unwrap_or_else(|| #lit .into()) }
-        } else {
-            quote! { self.#field_name.clone().ok_or(stringify!("{} is not set", #field_name))? }
-        };
-        quote! { let #field_name = #expr ; }
-    });
-    let build_fields = fields.iter().map(|f| {
-        let field_name = &f.ident;
-        quote! { #field_name }
     });
     let generics = &ast.generics;
     let wher = &generics.where_clause;
     let stripped_generics = get_stripped_generics(generics);
     let vis = &ast.vis;
+
+    let build_fields = fields.iter().map(|f| {
+        let field_name = &f.ident;
+        quote! { #field_name }
+    });
+    let build_fields_let = fields.iter().map(|f| {
+        let field_name = &f.ident;
+        let expr =
+            if is_optional(f) {
+                quote! { self.#field_name.take() }
+            } else if let Ok(lit) = find_attr_nameval_expr(f, "def"){
+                quote! { self.#field_name.take().unwrap_or_else(|| #lit .into()) }
+            } else {
+                quote! { self.#field_name.take().ok_or(stringify!("{} is not set", #field_name))? }
+            };
+        quote! { let #field_name = #expr ; }
+    });
+
     quote! {
+        #[derive(Clone)]
         #vis struct #builder_name #generics {
             #( #builder_fields ,)*
         }
 
         impl #generics #builder_name #stripped_generics #wher {
-            #vis fn build(&self) -> std::result::Result<#ident #stripped_generics,std::boxed::Box<dyn std::error::Error>> {
+            #vis fn build(&mut self) -> std::result::Result<#ident #stripped_generics,std::boxed::Box<dyn std::error::Error>> {
                 #( #build_fields_let )*
                 Ok(#ident {
                     #( #build_fields ,)*
                 })
             }
+
             #( #builder_methods )*
         }
 
