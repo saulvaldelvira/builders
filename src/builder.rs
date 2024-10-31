@@ -45,6 +45,12 @@ fn is_optional(f: &syn::Field) -> bool {
     } else { false }
 }
 
+fn is_disabled(f: &syn::Field) -> bool {
+    if let Ok(Lit::Bool(LitBool{value,..})) = find_attr_nameval_lit(f, "disabled") {
+        value
+    } else { false }
+}
+
 fn is_each(f: &syn::Field) -> bool {
     matches!(find_attr_nameval_lit(f, "each"), Ok(Lit::Str(_)))
 }
@@ -64,7 +70,7 @@ pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro
     } else {
         unimplemented!()
     };
-    let builder_fields = fields.iter().map(|f| {
+    let builder_fields = fields.iter().filter(|f| !is_disabled(f)).map(|f| {
         let name = &f.ident;
         let ty = &f.ty;
         if is_optional(f) {
@@ -73,7 +79,7 @@ pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro
             quote!( #name: std::option::Option<#ty> )
         }
     });
-    let builder_methods = fields.iter().map(|f| {
+    let builder_methods = fields.iter().filter(|f| !is_disabled(f)).map(|f| {
         let field_name = &f.ident;
         match find_attr_nameval_lit(f, "each") {
             Ok(Lit::Str(lit)) => {
@@ -124,7 +130,7 @@ pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro
             }
         }
     });
-    let empty_fields = fields.iter().map(|f| {
+    let empty_fields = fields.iter().filter(|f| !is_disabled(f)).map(|f| {
         let field_name = &f.ident;
         if is_each(f) {
             let Some((out,_)) = get_inner_tys(&f.ty, &["Vec","HashMap"]) else { unreachable!() };
@@ -149,7 +155,13 @@ pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro
     let build_fields_let = fields.iter().map(|f| {
         let field_name = &f.ident;
         let expr =
-            if is_optional(f) {
+            if is_disabled(f) {
+                let Ok(lit) = find_attr_nameval_expr(f, "def") else {
+                    panic!("Disabled field must have a builder(def = ...) attribute");
+                };
+                quote! { #lit }
+            }
+            else if is_optional(f) {
                 quote! { self.#field_name.take() }
             } else if let Ok(lit) = find_attr_nameval_expr(f, "def"){
                 quote! { self.#field_name.take().unwrap_or_else(|| #lit .into()) }
