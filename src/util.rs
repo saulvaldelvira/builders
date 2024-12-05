@@ -1,19 +1,16 @@
 use syn::{punctuated::Punctuated, spanned::Spanned, token::Comma, AngleBracketedGenericArguments, Attribute, Data, DataStruct, DeriveInput, Field, Fields, FieldsNamed, GenericArgument, GenericParam, Generics, Ident, Meta, MetaList, MetaNameValue, Path, PathArguments, Type, TypePath};
 use quote::quote;
 
-pub (crate) fn get_inner_ty<'a>(ty: &'a syn::Type, from: &str) -> Option<Vec<&'a syn::Type>> {
+pub (crate) fn get_inner_ty<'a>(ty: &'a syn::Type) -> Option<Vec<&'a syn::Type>> {
     let Type::Path(
             TypePath {
                 path : Path { ref segments, .. }, ..
         }) = ty else { return None };
-    if let Some(segment) = segments.last() {
-        if segment.ident != from {
-            return None;
-        }
-    }
+    let segment = segments.last()?;
+
     if let PathArguments::AngleBracketed(
             AngleBracketedGenericArguments { ref args, .. }
-            , .. ) = segments[0].arguments
+            , .. ) = segment.arguments
     {
         return Some(args.into_iter().filter_map(|t| {
             if let GenericArgument::Type(ref t) = t {
@@ -25,11 +22,11 @@ pub (crate) fn get_inner_ty<'a>(ty: &'a syn::Type, from: &str) -> Option<Vec<&'a
     None
 }
 
-pub (crate) fn get_inner_tys<'a>(ty: &'a syn::Type, from: &'a [&str]) -> Option<(&'a str,Vec<&'a syn::Type>)> {
-    from.into_iter().filter_map(|from| {
-        get_inner_ty(ty, from).map(|ty| (*from,ty))
-    }).next()
-}
+/* pub (crate) fn get_inner_tys<'a>(ty: &'a syn::Type, from: &'a [&str]) -> Option<(&'a str,Vec<&'a syn::Type>)> { */
+/*     from.into_iter().filter_map(|from| { */
+/*         get_inner_ty(ty, from).map(|ty| (*from,ty)) */
+/*     }).next() */
+/* } */
 
 pub (crate) fn get_stripped_generics(generics: &Generics) -> proc_macro2::TokenStream {
     let generics = generics.params.iter().map(|param| {

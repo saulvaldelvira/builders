@@ -34,11 +34,11 @@ use std::collections::HashMap;
 #[derive(Builder)]
 pub struct Command {
     executable: String,
-    #[builder(each = "arg")]
+    #[builder(vec = "arg")]
     args: Vec<String>,
-    #[builder(each = "env")]
+    #[builder(vec = "env")]
     env: Vec<String>,
-    #[builder(each = "key")]
+    #[builder(map = "key")]
     keys: HashMap<i32,String>,
     #[builder(optional = true)]
     current_dir: Option<String>,

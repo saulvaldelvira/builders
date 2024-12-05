@@ -33,9 +33,9 @@ use builders::Builder;
 #[derive(Builder)]
 pub struct Command {
     executable: String,
-    #[builder(each = "arg")]
+    #[builder(vec = "arg")]
     args: Vec<String>,
-    #[builder(each = "env")]
+    #[builder(vec = "env")]
     env: Vec<String>,
     #[builder(optional = true)]
     current_dir: Option<String>,

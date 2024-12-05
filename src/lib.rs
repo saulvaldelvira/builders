@@ -22,32 +22,36 @@ pub fn getters_derive(input: TokenStream) -> TokenStream {
 
     let prefix = util::get_prefix(&ast.attrs, "get_", "getters");
 
-    util::gen_for_each_field(&ast, "getter", &prefix, |field,each| {
+    util::gen_for_each_field(&ast, "getter", &prefix, |field,_each| {
         let ident = util::get_field_ident(field);
         let ty = &field.ty;
-        if each {
-            if let Some((out,inner)) = util::get_inner_tys(ty,&["Vec","HashMap"]) {
-                let first = inner[0];
-                return match out {
-                    "Vec" => {
-                        quote! {
-                            (&self, i: usize) -> std::option::Option<&#first> {
-                                self.#ident.get(i)
-                            }
-                        }
-                    },
-                    "HashMap" => {
-                        let second = inner[1];
-                        quote! {
-                            (&self, key: & #first) -> std::option::Option<&#second> {
-                                self.#ident.get(key)
-                            }
-                        }
-                    },
-                    _ => unreachable!()
-                }
-            }
-        }
+        /* if each { */
+        /*     if let Some(v) = util::get_inner_ty(ty) { */
+        /*         if v.las */
+        /*     } */
+
+        /*     if let Some((out,inner)) = util::get_inner_tys(ty,&["Vec","HashMap"]) { */
+        /*         let first = inner[0]; */
+        /*         return match out { */
+        /*             "Vec" => { */
+        /*                 quote! { */
+        /*                     (&self, i: usize) -> ::core::option::Option<&#first> { */
+        /*                         self.#ident.get(i) */
+        /*                     } */
+        /*                 } */
+        /*             }, */
+        /*             "HashMap" => { */
+        /*                 let second = inner[1]; */
+        /*                 quote! { */
+        /*                     (&self, key: & #first) -> ::core::option::Option<&#second> { */
+        /*                         self.#ident.get(key) */
+        /*                     } */
+        /*                 } */
+        /*             }, */
+        /*             _ => unreachable!() */
+        /*         } */
+        /*     } */
+        /* } */
         quote! {
             (&self) -> & #ty {
                 & self.#ident
@@ -68,7 +72,7 @@ pub fn setters_derive(input: TokenStream) -> TokenStream {
         let ident = util::get_field_ident(field);
         let ty = &field.ty;
         quote::quote! {
-            (&mut self, #ident: impl std::convert::Into<#ty>) {
+            (&mut self, #ident: impl ::core::convert::Into<#ty>) {
                 self.#ident = #ident.into();
             }
         }
@@ -98,8 +102,10 @@ pub fn auto_box_derive(input: TokenStream) -> TokenStream {
     let wher = &generics.where_clause;
 
     quote::quote! {
+        extern crate alloc;
+
         impl #generics #ident #stripped #wher {
-            #vis fn as_box(self) -> std::boxed::Box<#ident #stripped> {
+            #vis fn as_box(self) -> ::alloc::boxed::Box<#ident #stripped> {
                 std::boxed::Box::new(self)
             }
         }

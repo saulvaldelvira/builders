@@ -19,7 +19,7 @@ use builders::Builder;
 #[derive(Builder)]
 pub struct Command {
     executable: String,
-    #[builder(each = 2)]
+    #[builder(vec = 2)]
     args: Vec<String>,
     env: Vec<String>,
     current_dir: Option<String>,

@@ -4,7 +4,7 @@ use proc_macro2::{TokenStream, TokenTree};
 use quote::quote;
 use syn::{parse_macro_input, parse_quote, Data, DataStruct, DeriveInput, Expr, Fields, FieldsNamed, Ident, Lit, LitBool, Type};
 
-use crate::util::{get_inner_ty, get_inner_tys, get_stripped_generics};
+use crate::util::{get_inner_ty, get_stripped_generics};
 
 fn find_attr_nameval(f: &syn::Field, name: &str) -> Result<TokenStream,proc_macro2::TokenStream> {
     for attr in &f.attrs {
@@ -52,7 +52,8 @@ fn is_disabled(f: &syn::Field) -> bool {
 }
 
 fn is_each(f: &syn::Field) -> bool {
-    matches!(find_attr_nameval_lit(f, "each"), Ok(Lit::Str(_)))
+    matches!(find_attr_nameval_lit(f, "vec"), Ok(Lit::Str(_)))
+    || matches!(find_attr_nameval_lit(f, "map"), Ok(Lit::Str(_)))
 }
 
 pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
@@ -76,35 +77,21 @@ pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro
         if is_optional(f) {
             quote!( #name: #ty )
         } else {
-            quote!( #name: std::option::Option<#ty> )
+            quote!( #name: ::core::option::Option<#ty> )
         }
     });
     let builder_methods = fields.iter().filter(|f| !is_disabled(f)).map(|f| {
         let field_name = &f.ident;
-        match find_attr_nameval_lit(f, "each") {
+        match find_attr_nameval_lit(f, "vec") {
             Ok(Lit::Str(lit)) => {
                 let arg = Ident::new(&lit.value(), lit.span());
-                let (ty,inner_ty) = get_inner_tys(&f.ty, &["Vec","HashMap"]).unwrap();
-                let first = inner_ty.first();
-                match ty {
-                    "Vec" => {
-                        quote! {
-                            pub fn #arg(&mut self, #arg: impl std::convert::Into<#first>) -> &mut Self {
-                                self.#field_name.as_mut().unwrap().push(#arg.into());
-                                self
-                            }
-                        }
-                    },
-                    "HashMap" => {
-                        let second = inner_ty[1];
-                        quote! {
-                            pub fn #arg(&mut self, #arg: impl std::convert::Into<#first>, val: impl std::convert::Into<#second>) -> &mut Self {
-                                self.#field_name.as_mut().unwrap().insert(#arg.into(),val.into());
-                                self
-                            }
-                        }
-                    },
-                   _ => unimplemented!()
+                let tys = get_inner_ty(&f.ty).expect("Expected at least one generic argument");
+                let inner = tys.first();
+                quote! {
+                    pub fn #arg(&mut self, #arg: impl ::core::convert::Into<#inner>) -> &mut Self {
+                        self.#field_name.as_mut().unwrap().push(#arg.into());
+                        self
+                    }
                 }
             },
             Ok(_) => {
@@ -112,19 +99,38 @@ pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro
                     compile_error!("Expected \"each\" to be a string");
                 }
             },
-            Err(err) => {
-                let ty: Cow<Type> = if is_optional(f) {
-                    let t = get_inner_ty(&f.ty,"Option").map(|l| l[0]).unwrap_or(&f.ty);
-                    let t: Type = parse_quote!(#t);
-                    Cow::Owned(t)
-                } else {
-                    Cow::Borrowed(&f.ty)
-                };
-                quote! {
-                    #err
-                    pub fn #field_name(&mut self, #field_name: impl std::convert::Into<#ty>) -> &mut Self {
-                        self.#field_name = std::option::Option::Some(#field_name.into());
-                        self
+            Err(_) => {
+                match find_attr_nameval_lit(f, "map") {
+                    Ok(Lit::Str(lit)) => {
+                        let arg = Ident::new(&lit.value(), lit.span());
+                        let [first, second] = get_inner_ty(&f.ty).expect("Expected at least one generic argument")[..2] else { panic!() };
+                        quote! {
+                            pub fn #arg(&mut self, #arg: impl ::core::convert::Into<#first>, val: impl ::core::convert::Into<#second>) -> &mut Self {
+                                self.#field_name.as_mut().unwrap().insert(#arg.into(),val.into());
+                                self
+                            }
+                        }
+                    },
+                    Ok(_) => {
+                        quote! {
+                            compile_error!("Expected \"each\" to be a string");
+                        }
+                    },
+                    Err(err) => {
+                        let ty: Cow<Type> = if is_optional(f) {
+                            let t = get_inner_ty(&f.ty).map(|l| l[0]).unwrap_or(&f.ty);
+                            let t: Type = parse_quote!(#t);
+                            Cow::Owned(t)
+                        } else {
+                            Cow::Borrowed(&f.ty)
+                        };
+                        quote! {
+                            #err
+                            pub fn #field_name(&mut self, #field_name: impl ::core::convert::Into<#ty>) -> &mut Self {
+                                self.#field_name = ::core::option::Option::Some(#field_name.into());
+                                self
+                            }
+                        }
                     }
                 }
             }
@@ -133,15 +139,9 @@ pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro
     let empty_fields = fields.iter().filter(|f| !is_disabled(f)).map(|f| {
         let field_name = &f.ident;
         if is_each(f) {
-            let Some((out,_)) = get_inner_tys(&f.ty, &["Vec","HashMap"]) else { unreachable!() };
-            let out = match out {
-                "Vec" => quote!(Vec),
-                "HashMap" => quote!(HashMap),
-                _ => unreachable!()
-            };
-            return quote! { #field_name : std::option::Option::Some(#out ::new()) };
+            return quote! { #field_name : ::core::option::Option::Some(::core::default::Default::default()) };
         }
-        quote! { #field_name : std::option::Option::None }
+        quote! { #field_name : ::core::option::Option::None }
     });
     let generics = &ast.generics;
     let wher = &generics.where_clause;
@@ -178,7 +178,7 @@ pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro
         }
 
         impl #generics #builder_name #stripped_generics #wher {
-            #vis fn build(&mut self) -> std::result::Result<#ident #stripped_generics,std::boxed::Box<dyn std::error::Error>> {
+            #vis fn build(&mut self) -> ::core::result::Result<#ident #stripped_generics, &'static str> {
                 #( #build_fields_let )*
                 Ok(#ident {
                     #( #build_fields ,)*

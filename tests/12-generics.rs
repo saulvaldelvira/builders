@@ -2,7 +2,7 @@ use builders::*;
 
 #[derive(Builder,Getters,Setters)]
 pub struct Command<'a,T: Clone> {
-    #[builder(each = "arg")]
+    #[builder(vec = "arg")]
     args: Vec<&'a str>,
     i: T,
 }
