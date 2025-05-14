@@ -31,7 +31,7 @@ pub fn getters_derive(input: TokenStream) -> TokenStream {
                 return match out {
                     "Vec" => {
                         quote! {
-                            (&self, i: usize) -> std::option::Option<&#first> {
+                            (&self, i: usize) -> ::core::option::Option<&#first> {
                                 self.#ident.get(i)
                             }
                         }
@@ -39,7 +39,7 @@ pub fn getters_derive(input: TokenStream) -> TokenStream {
                     "HashMap" => {
                         let second = inner[1];
                         quote! {
-                            (&self, key: & #first) -> std::option::Option<&#second> {
+                            (&self, key: & #first) -> ::core::option::Option<&#second> {
                                 self.#ident.get(key)
                             }
                         }
@@ -68,7 +68,7 @@ pub fn setters_derive(input: TokenStream) -> TokenStream {
         let ident = util::get_field_ident(field);
         let ty = &field.ty;
         quote::quote! {
-            (&mut self, #ident: impl std::convert::Into<#ty>) {
+            (&mut self, #ident: impl ::core::convert::Into<#ty>) {
                 self.#ident = #ident.into();
             }
         }
@@ -98,8 +98,10 @@ pub fn auto_box_derive(input: TokenStream) -> TokenStream {
     let wher = &generics.where_clause;
 
     quote::quote! {
+        extern crate alloc;
+
         impl #generics #ident #stripped #wher {
-            #vis fn as_box(self) -> std::boxed::Box<#ident #stripped> {
+            #vis fn as_box(self) -> ::alloc::boxed::Box<#ident #stripped> {
                 std::boxed::Box::new(self)
             }
         }

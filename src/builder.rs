@@ -76,7 +76,7 @@ pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro
         if is_optional(f) {
             quote!( #name: #ty )
         } else {
-            quote!( #name: std::option::Option<#ty> )
+            quote!( #name: ::core::option::Option<#ty> )
         }
     });
     let builder_methods = fields.iter().filter(|f| !is_disabled(f)).map(|f| {
@@ -89,7 +89,7 @@ pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro
                 match ty {
                     "Vec" => {
                         quote! {
-                            pub fn #arg(&mut self, #arg: impl std::convert::Into<#first>) -> &mut Self {
+                            pub fn #arg(&mut self, #arg: impl ::core::convert::Into<#first>) -> &mut Self {
                                 self.#field_name.as_mut().unwrap().push(#arg.into());
                                 self
                             }
@@ -98,7 +98,7 @@ pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro
                     "HashMap" => {
                         let second = inner_ty[1];
                         quote! {
-                            pub fn #arg(&mut self, #arg: impl std::convert::Into<#first>, val: impl std::convert::Into<#second>) -> &mut Self {
+                            pub fn #arg(&mut self, #arg: impl ::core::convert::Into<#first>, val: impl ::core::convert::Into<#second>) -> &mut Self {
                                 self.#field_name.as_mut().unwrap().insert(#arg.into(),val.into());
                                 self
                             }
@@ -122,8 +122,8 @@ pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro
                 };
                 quote! {
                     #err
-                    pub fn #field_name(&mut self, #field_name: impl std::convert::Into<#ty>) -> &mut Self {
-                        self.#field_name = std::option::Option::Some(#field_name.into());
+                    pub fn #field_name(&mut self, #field_name: impl ::core::convert::Into<#ty>) -> &mut Self {
+                        self.#field_name = ::core::option::Option::Some(#field_name.into());
                         self
                     }
                 }
@@ -139,9 +139,9 @@ pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro
                 "HashMap" => quote!(HashMap),
                 _ => unreachable!()
             };
-            return quote! { #field_name : std::option::Option::Some(#out ::new()) };
+            return quote! { #field_name : ::core::option::Option::Some(#out ::new()) };
         }
-        quote! { #field_name : std::option::Option::None }
+        quote! { #field_name : ::core::option::Option::None }
     });
     let generics = &ast.generics;
     let wher = &generics.where_clause;
@@ -178,7 +178,7 @@ pub (crate) fn builder_derive_impl(input: proc_macro::TokenStream) -> proc_macro
         }
 
         impl #generics #builder_name #stripped_generics #wher {
-            #vis fn build(&mut self) -> std::result::Result<#ident #stripped_generics,std::boxed::Box<dyn std::error::Error>> {
+            #vis fn build(&mut self) -> ::core::result::Result<#ident #stripped_generics, &'static str> {
                 #( #build_fields_let )*
                 Ok(#ident {
                     #( #build_fields ,)*
