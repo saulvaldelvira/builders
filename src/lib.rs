@@ -25,33 +25,6 @@ pub fn getters_derive(input: TokenStream) -> TokenStream {
     util::gen_for_each_field(&ast, "getter", &prefix, |field,_each| {
         let ident = util::get_field_ident(field);
         let ty = &field.ty;
-        /* if each { */
-        /*     if let Some(v) = util::get_inner_ty(ty) { */
-        /*         if v.las */
-        /*     } */
-
-        /*     if let Some((out,inner)) = util::get_inner_tys(ty,&["Vec","HashMap"]) { */
-        /*         let first = inner[0]; */
-        /*         return match out { */
-        /*             "Vec" => { */
-        /*                 quote! { */
-        /*                     (&self, i: usize) -> ::core::option::Option<&#first> { */
-        /*                         self.#ident.get(i) */
-        /*                     } */
-        /*                 } */
-        /*             }, */
-        /*             "HashMap" => { */
-        /*                 let second = inner[1]; */
-        /*                 quote! { */
-        /*                     (&self, key: & #first) -> ::core::option::Option<&#second> { */
-        /*                         self.#ident.get(key) */
-        /*                     } */
-        /*                 } */
-        /*             }, */
-        /*             _ => unreachable!() */
-        /*         } */
-        /*     } */
-        /* } */
         quote! {
             (&self) -> & #ty {
                 & self.#ident
@@ -98,7 +71,7 @@ pub fn auto_box_derive(input: TokenStream) -> TokenStream {
     let ident = &ast.ident;
     let vis = &ast.vis;
     let generics = &ast.generics;
-    let stripped = util::get_stripped_generics(generics);
+    let stripped = util::get_stripped_generics(generics, false);
     let wher = &generics.where_clause;
 
     quote::quote! {
@@ -118,7 +91,7 @@ pub fn wrap_enum_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse_macro_input!(input as syn::DeriveInput);
     let ident = &ast.ident;
     let generics = &ast.generics;
-    let stripped = util::get_stripped_generics(generics);
+    let stripped = util::get_stripped_generics(generics, false);
     let wher = &generics.where_clause;
 
     let mut enum_name = None;

@@ -28,13 +28,26 @@ pub (crate) fn get_inner_ty<'a>(ty: &'a syn::Type) -> Option<Vec<&'a syn::Type>>
 /*     }).next() */
 /* } */
 
-pub (crate) fn get_stripped_generics(generics: &Generics) -> proc_macro2::TokenStream {
+pub (crate) fn get_stripped_generics(generics: &Generics, preserve_bounds: bool) -> proc_macro2::TokenStream {
     let generics = generics.params.iter().map(|param| {
         let mut param = param.clone();
         match param {
-            GenericParam::Lifetime(ref mut l) => l.bounds = Punctuated::new(),
-            GenericParam::Type(ref mut t) => t.bounds = Punctuated::new(),
-            _ => {}
+            GenericParam::Lifetime(ref mut l) => {
+                if !preserve_bounds {
+                    l.bounds = Punctuated::new()
+                }
+            }
+            GenericParam::Type(ref mut t) => {
+                if !preserve_bounds {
+                    t.bounds = Punctuated::new();
+                }
+                t.eq_token = None;
+                t.default = None;
+            }
+            GenericParam::Const(ref mut c) => {
+                c.eq_token = None;
+                c.default = None;
+            }
         };
         quote!(#param)
     });
@@ -115,7 +128,7 @@ where
 
     let generics = &ast.generics;
     let wher = &generics.where_clause;
-    let stripped_generics = get_stripped_generics(generics);
+    let stripped_generics = get_stripped_generics(generics, false);
 
     quote! {
         impl #generics #name #stripped_generics #wher {

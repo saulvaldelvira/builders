@@ -14,5 +14,7 @@ fn tests() {
     t.pass("tests/11-prefix.rs");
     t.pass("tests/12-generics.rs");
     t.pass("tests/13-default.rs");
+    t.pass("tests/http.rs");
     t.pass("tests/constructor.rs");
+    t.pass("tests/infallible.rs");
 }

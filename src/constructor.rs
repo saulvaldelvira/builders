@@ -43,7 +43,7 @@ pub (crate) fn constructor_derive_impl(input: proc_macro::TokenStream) -> proc_m
 
     let generics = &ast.generics;
     let wher = &generics.where_clause;
-    let stripped_generics = get_stripped_generics(generics);
+    let stripped_generics = get_stripped_generics(generics, false);
 
     quote! {
         impl #generics #name #stripped_generics #wher {
